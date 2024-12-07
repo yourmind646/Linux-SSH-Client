@@ -11,27 +11,42 @@ clear_screen() {
 # Функция для подключения к серверу
 connect_to_server() {
     clear_screen
-    if [ ! -f $SERVER_LIST ]; then
+    if [ ! -f "$SERVER_LIST" ] || [ ! -s "$SERVER_LIST" ]; then
         echo -e "\e[31mСписок серверов пуст.\e[0m"
-        read -p "Нажмите любую клавишу чтобы продолжить..."
+        read -p "Нажмите любую клавишу, чтобы продолжить..."
         clear_screen
         return
     fi
-    
+
     echo -e "\e[34mСписок доступных серверов:\e[0m"
-    awk -F"|" '{print "\033[32m- " $1 " (" $2 ")\033[0m"}' $SERVER_LIST
-    
-    read -p "Введите название сервера для подключения: " name
-    server_info=$(grep "^$name|" $SERVER_LIST)
-    
-    if [ -n "$server_info" ]; then
+    declare -a servers
+    local index=1
+    while IFS='|' read -r server_name server_ip server_password; do
+        echo -e "\033[32m$index. $server_name ($server_ip)\033[0m"
+        servers+=("$server_name|$server_ip|$server_password")
+        ((index++))
+    done < "$SERVER_LIST"
+
+    read -p "Введите номер сервера для подключения: " choice
+
+    # Проверка, что ввод является числом
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+        echo -e "\e[31mПожалуйста, введите допустимый номер.\e[0m"
+        read -p "Нажмите любую клавишу, чтобы продолжить..."
+        clear_screen
+        return
+    fi
+
+    # Проверка, что номер находится в допустимом диапазоне
+    if [ "$choice" -ge 1 ] && [ "$choice" -le "${#servers[@]}" ]; then
+        server_info="${servers[$((choice-1))]}"
         IFS='|' read -r server_name server_ip server_password <<< "$server_info"
         echo -e "\e[33mПодключение к серверу $server_name ($server_ip)...\e[0m"
         sshpass -p "$server_password" ssh -o StrictHostKeyChecking=no root@"$server_ip"
         clear_screen
     else
-        echo -e "\e[31mСервер с названием $name не найден.\e[0m"
-        read -p "Нажмите любую клавишу чтобы продолжить..."
+        echo -e "\e[31mНеверный номер сервера.\e[0m"
+        read -p "Нажмите любую клавишу, чтобы продолжить..."
         clear_screen
     fi
 }
@@ -44,59 +59,75 @@ add_server() {
     read -sp "Введите пароль root: " password
     echo
 
-    echo "$name|$ip|$password" >> $SERVER_LIST
-    echo -e "\e[32mСервер $name добавлен в список.\e[0m"
-    read -p "Нажмите любую клавишу чтобы продолжить..."
+    echo "$name|$ip|$password" >> "$SERVER_LIST"
+    echo -e "\e[32mСервер '$name' добавлен в список.\e[0m"
+    read -p "Нажмите любую клавишу, чтобы продолжить..."
     clear_screen
 }
 
 # Функция для удаления сервера из списка
 remove_server() {
     clear_screen
-    if [ ! -f $SERVER_LIST ]; then
+    if [ ! -f "$SERVER_LIST" ] || [ ! -s "$SERVER_LIST" ]; then
         echo -e "\e[31mСписок серверов пуст.\e[0m"
-        read -p "Нажмите любую клавишу чтобы продолжить..."
+        read -p "Нажмите любую клавишу, чтобы продолжить..."
         clear_screen
         return
     fi
 
     echo -e "\e[34mСписок доступных серверов:\e[0m"
-    while IFS= read -r line
-    do
-        IFS='|' read -r -a server <<< "$line"
-        echo -e "\e[32m- ${server[0]} (${server[1]})\e[0m"
-    done < $SERVER_LIST
+    declare -a servers
+    local index=1
+    while IFS='|' read -r server_name server_ip server_password; do
+        echo -e "\033[32m$index. $server_name ($server_ip)\033[0m"
+        servers+=("$server_name|$server_ip|$server_password")
+        ((index++))
+    done < "$SERVER_LIST"
 
-    read -p "Введите название сервера для удаления: " name
+    read -p "Введите номер сервера для удаления: " choice
 
-    if grep -q "^$name|" $SERVER_LIST; then
-        grep -v "^$name|" $SERVER_LIST > $SERVER_LIST.tmp && mv $SERVER_LIST.tmp $SERVER_LIST
-        echo -e "\e[32mСервер $name удалён из списка.\e[0m"
-    else
-        echo -e "\e[31mСервер с названием $name не найден.\e[0m"
+    # Проверка, что ввод является числом
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+        echo -e "\e[31mПожалуйста, введите допустимый номер.\e[0m"
+        read -p "Нажмите любую клавишу, чтобы продолжить..."
+        clear_screen
+        return
     fi
-    read -p "Нажмите любую клавишу чтобы продолжить..."
+
+    # Проверка, что номер находится в допустимом диапазоне
+    if [ "$choice" -ge 1 ] && [ "$choice" -le "${#servers[@]}" ]; then
+        server_info="${servers[$((choice-1))]}"
+        IFS='|' read -r server_name server_ip server_password <<< "$server_info"
+        # Удаление выбранного сервера из файла
+        sed -i "${choice}d" "$SERVER_LIST"
+        echo -e "\e[32mСервер '$server_name' удалён из списка.\e[0m"
+    else
+        echo -e "\e[31mНеверный номер сервера.\e[0m"
+    fi
+    read -p "Нажмите любую клавишу, чтобы продолжить..."
     clear_screen
 }
 
 # Функция для показа списка серверов
 list_servers() {
     clear_screen
-    if [ ! -f $SERVER_LIST ]; then
+    if [ ! -f "$SERVER_LIST" ] || [ ! -s "$SERVER_LIST" ]; then
         echo -e "\e[31mСписок серверов пуст.\e[0m"
-        read -p "Нажмите любую клавишу чтобы продолжить..."
+        read -p "Нажмите любую клавишу, чтобы продолжить..."
         clear_screen
         return
-    fi
-    
+        fi
+
     echo -e "\e[34mСписок доступных серверов:\e[0m"
-    while IFS= read -r line
-    do
-        IFS='|' read -r -a server <<< "$line"
-        echo -e "\e[32m- ${server[0]} (${server[1]})\e[0m"
-    done < $SERVER_LIST
-    
-    read -p "Нажмите любую клавишу чтобы продолжить..."
+    declare -a servers
+    local index=1
+    while IFS='|' read -r server_name server_ip server_password; do
+        echo -e "\033[32m$index. $server_name ($server_ip)\033[0m"
+        servers+=("$server_name|$server_ip|$server_password")
+        ((index++))
+    done < "$SERVER_LIST"
+
+    read -p "Нажмите любую клавишу, чтобы продолжить..."
     clear_screen
 }
 
@@ -108,7 +139,7 @@ while true; do
     echo -e "\e[34m4. Показать список серверов\e[0m"
     echo -e "\e[34m5. Выйти\e[0m"
     read -p "Выберите опцию: " choice
-    
+
     case $choice in
         1) connect_to_server ;;
         2) add_server ;;
@@ -117,9 +148,8 @@ while true; do
         5) break ;;
         *) 
             echo -e "\e[31mНеверный выбор! Пожалуйста, попробуйте снова.\e[0m"
-            read -p "Нажмите любую клавишу чтобы продолжить..."
+            read -p "Нажмите любую клавишу, чтобы продолжить..."
             clear_screen
             ;;
     esac
 done
-
