@@ -6,8 +6,13 @@
 
 Перед использованием скрипта, необходимо установить `sshpass`. Для этого выполните следующую команду:
 
+Debian based:
 ```bash
 sudo apt install sshpass
+```
+Arch:
+```bash
+yay -S sshpass
 ```
 
 ## Установка
